@@ -76,3 +76,16 @@ DEPENDENCY_BOT_TITLE_WORDS = (
 STALE_DAYS = 90
 
 RECENT_CLOSED_DAYS = 60
+
+DEFAULT_WATCH_REPOS = (
+    "psf/black",
+    "sphinx-doc/sphinx",
+    "pygments/pygments",
+    "pytest-dev/pytest",
+    "tqdm/tqdm",
+    "nedbat/coveragepy",
+    "pradyunsg/furo",
+    "pypa/pip",
+    "eslint/eslint",
+    "NousResearch/hermes-agent",
+)

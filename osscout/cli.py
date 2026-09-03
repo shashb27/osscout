@@ -6,6 +6,7 @@ from .culture import scan_repo
 from .data import DURABLE_NICHES, FARM_WINDOWS
 from .mining import mine_invited
 from .sweep import scan_issue
+from .watch import format_watch, run_watch
 
 EXIT_CODES = {"GO": 0, "PASS": 0, "OK": 0, "NO-GO": 1, "SKIP": 1, "SKIP (stale)": 1,
               "DEAD": 1, "LIKELY FIXED": 1, "NO DATA": 2, "BORDERLINE": 2, "CAUTION": 2}
@@ -91,6 +92,12 @@ def main(argv=None) -> int:
 
     sub.add_parser("windows", help="measured farm windows + durable niches")
 
+    p_watch = sub.add_parser("watch", help="sweep newest issues across a repo shortlist")
+    p_watch.add_argument("--config", default=None, help="path to osscout.toml (default: ./osscout.toml or ~/.config/osscout/config.toml)")
+    p_watch.add_argument("--repos", nargs="*", default=[], help="repos to sweep (overrides config)")
+    p_watch.add_argument("--days", type=int, default=None, help="only issues created within N days (default 7)")
+    p_watch.add_argument("--limit", type=int, default=None, help="max issues per repo (default 15)")
+
     args = parser.parse_args(argv)
     if args.cmd == "repo":
         report = scan_repo(args.repo, args.limit)
@@ -103,6 +110,15 @@ def main(argv=None) -> int:
     elif args.cmd == "mine":
         _print_mine(mine_invited(args.repo))
         code = 0
+    elif args.cmd == "watch":
+        try:
+            report = run_watch(args.repos, args.days, args.limit, args.config)
+        except (FileNotFoundError, ValueError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            code = 2
+        else:
+            print(format_watch(report))
+            code = 0
     else:
         _print_windows()
         code = 0

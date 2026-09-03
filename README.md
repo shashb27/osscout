@@ -1,7 +1,7 @@
 # osscout
 
 [![CI](https://github.com/shashb27/osscout/actions/workflows/ci.yml/badge.svg)](https://github.com/shashb27/osscout/actions/workflows/ci.yml)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Screen upstream repos and issues for open-source contribution viability before you spend a day on a PR that's already taken.
@@ -43,6 +43,30 @@ osscout mine pyinstaller/pyinstaller
 osscout windows
 ```
 
+**Daily sweep across your repo shortlist (v0.3):**
+
+```
+osscout watch
+```
+
+Sweeps the newest open issues (default: filed within 7 days, max 15 per repo) across a shortlist and marks each one `TAKEN` (open/recent PR, merged fix, bot-queue marker, hard-stop label, or confirmed soft-claim), `CAUTION` (unconfirmed claim or old closed PR), or `CLEAN`. It ships with a default shortlist of vetted communities; bring your own via `osscout.toml` (checked in the current directory, then `~/.config/osscout/config.toml`) or `--repos`:
+
+```toml
+[watch]
+repos = ["psf/black", "sphinx-doc/sphinx", "pygments/pygments"]
+days = 7
+limit = 15
+```
+
+```
+osscout watch --days 3 --limit 10
+osscout watch --repos pypa/pip eslint/eslint
+```
+
+A `CLEAN` verdict from `watch` is a first pass, not a gate — run `osscout issue` (full competing-PR sweep by number *and* title keywords, plus the whole comment thread) on anything you're about to spend a day on. Watch searches by issue number only, so PRs that fix without referencing the number can slip past it.
+
+Note: a full sweep makes a couple of hundred `gh` calls (well within authed rate limits) and takes a few minutes when run serially.
+
 ## Exit codes (scriptable)
 
 - `0` — GO / PASS
@@ -56,6 +80,5 @@ osscout windows
 
 ## Roadmap
 
-- `osscout watch` — fresh-issue sweep across configured repos with per-issue taken/clean marking
 - historical farm-window measurement (issue-created → first-PR timestamps) instead of a static table
-- TOML config for a personal repo shortlist
+- parallelize the `watch` sweep across repos
