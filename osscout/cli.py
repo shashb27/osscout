@@ -15,6 +15,14 @@ EXIT_CODES = {"GO": 0, "PASS": 0, "OK": 0, "NO-GO": 1, "SKIP": 1, "SKIP (stale)"
               "DEAD": 1, "LIKELY FIXED": 1, "NO DATA": 2, "BORDERLINE": 2, "CAUTION": 2}
 
 
+def _force_utf8_stdio():
+    # Issue titles may contain any Unicode; Windows consoles default to a
+    # legacy code page (cp1252) that crashes printing them.
+    for stream in (sys.stdout, sys.stderr):
+        if stream.encoding and stream.encoding.lower() not in ("utf-8", "utf8"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def _print_repo(report: dict) -> None:
     c = report["culture"]
     print(f"repo: {report['repo']}")
@@ -108,6 +116,7 @@ def main(argv=None) -> int:
     p_disc.add_argument("--write", metavar="PATH", default=None, help="write the suggested [watch] block to PATH")
 
     args = parser.parse_args(argv)
+    _force_utf8_stdio()
     if args.cmd == "repo":
         report = scan_repo(args.repo, args.limit)
         _print_repo(report)
