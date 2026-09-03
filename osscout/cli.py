@@ -1,9 +1,12 @@
 import argparse
 import sys
+from pathlib import Path
 
 from . import __version__
 from .culture import scan_repo
 from .data import DURABLE_NICHES, FARM_WINDOWS
+from .discover import _toml_block, discover_repos, format_discovery, starred_repos
+from .gh import GhError
 from .mining import mine_invited
 from .sweep import scan_issue
 from .watch import format_watch, run_watch
@@ -98,6 +101,12 @@ def main(argv=None) -> int:
     p_watch.add_argument("--days", type=int, default=None, help="only issues created within N days (default 7)")
     p_watch.add_argument("--limit", type=int, default=None, help="max issues per repo (default 15)")
 
+    p_disc = sub.add_parser("discover", help="bootstrap a watchlist: run the repo gate over candidates")
+    p_disc.add_argument("--from-stars", metavar="LOGIN", default=None, help="scan the GitHub stars of LOGIN")
+    p_disc.add_argument("--repos", nargs="*", default=[], help="explicit candidate repos (overrides --from-stars)")
+    p_disc.add_argument("--limit", type=int, default=20, help="merged PRs analyzed per repo (default 20)")
+    p_disc.add_argument("--write", metavar="PATH", default=None, help="write the suggested [watch] block to PATH")
+
     args = parser.parse_args(argv)
     if args.cmd == "repo":
         report = scan_repo(args.repo, args.limit)
@@ -118,6 +127,27 @@ def main(argv=None) -> int:
             code = 2
         else:
             print(format_watch(report))
+            code = 0
+    elif args.cmd == "discover":
+        if args.repos:
+            candidates = args.repos
+        elif args.from_stars:
+            try:
+                candidates = starred_repos(args.from_stars)
+            except GhError as e:
+                print(f"error: {e}", file=sys.stderr)
+                candidates = []
+        else:
+            candidates = []
+        if not candidates:
+            print("error: no candidates - pass --repos OWNER/REPO ... or --from-stars LOGIN", file=sys.stderr)
+            code = 2
+        else:
+            report = discover_repos(candidates, args.limit)
+            print(format_discovery(report))
+            if args.write:
+                Path(args.write).write_text(_toml_block(report["suggested"]) + "\n", encoding="utf-8")
+                print(f"\nwrote {args.write}")
             code = 0
     else:
         _print_windows()

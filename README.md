@@ -67,6 +67,17 @@ A `CLEAN` verdict from `watch` is a first pass, not a gate — run `osscout issu
 
 Note: a full sweep makes a couple of hundred `gh` calls (well within authed rate limits) and takes a few minutes when run serially.
 
+**Bootstrap your shortlist (v0.4):**
+
+```
+osscout discover --from-stars your-login
+osscout discover --repos psf/black pallets/click tqdm/tqdm
+```
+
+Runs the `repo` gate (merge culture + staleness) over every candidate and prints a PASS/SKIP/BORDERLINE board plus a ready-to-paste `[watch]` block. Add `--write osscout.toml` to save the suggestion directly. New to contributing and don't know what to watch? Start from your stars.
+
+See [PRODUCT.md](PRODUCT.md) for the full intent, user model, and honest limitations.
+
 ## Exit codes (scriptable)
 
 - `0` — GO / PASS
