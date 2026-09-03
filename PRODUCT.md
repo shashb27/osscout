@@ -35,6 +35,10 @@ go/no-go before you invest a day:
 - `osscout mine` — maintainer invitations (`PR welcome`, `pull-request wanted`).
 - `osscout discover` — bootstrap a shortlist: run the repo gate over your
   GitHub stars or a list of candidates; get a suggested `osscout.toml`.
+- `osscout track` — the other half of the loop: a board of everything you've
+  filed or are waiting on (open PRs auto-discovered, plus issue comments and
+  upstream blockers from a local ledger), flagging replies, review decisions,
+  competing PRs, and landed blockers.
 
 It is **not** an issue recommender, dashboard, bounty board, or a bot that
 fixes things. Discovery tools already exist; screening is the gap.
@@ -94,6 +98,8 @@ single-maintainer merge dominance as a hard warning.
   without referencing the number can slip past. `osscout issue` (number +
   title keywords + full thread) remains the deep gate.
 - Stateless: no history, no "changed since yesterday", no scheduling.
+  (`track` mitigates this for your own contributions via a local ledger, but
+  there is still no server-side state or diffing.)
 - GitHub-only, via the `gh` CLI; no REST fallback.
 - Merge-culture rules are heuristics (≥80% dominance, <2 humans, ≥50% bots)
   — a SKIP is a warning, not a verdict about you.

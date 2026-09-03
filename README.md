@@ -78,11 +78,28 @@ Runs the `repo` gate (merge culture + staleness) over every candidate and prints
 
 See [PRODUCT.md](PRODUCT.md) for the full intent, user model, and honest limitations.
 
+**Track what you already filed (v0.5):**
+
+```
+osscout track
+```
+
+One board of everything you're waiting on: your open PRs (auto-discovered via `gh search`), plus a `contributions.toml` ledger for what search can't see — issue comments you left, upstream PRs you're blocked on. Per item: state, CI, review decision, who spoke last (and when), competing PRs on the parent issue, and for upstream blockers — whether the thing you're waiting on landed. Anything that needs a reply, rebase, or ledger cleanup gets flagged; exit code 0 means nothing moved.
+
+```toml
+# contributions.toml
+[[contribution]]
+repo = "psf/black"
+number = 5386
+kind = "pr"              # pr | issue-comment | upstream
+issue = 5379             # optional: detect competing PRs on the parent issue
+```
+
 ## Exit codes (scriptable)
 
-- `0` — GO / PASS
-- `1` — NO-GO / SKIP / DEAD / LIKELY FIXED
-- `2` — BORDERLINE / CAUTION / NO DATA
+- `0` — GO / PASS / quiet (track: nothing needs attention)
+- `1` — NO-GO / SKIP / DEAD / LIKELY FIXED / attention (track: reply, rebase, or cleanup due)
+- `2` — BORDERLINE / CAUTION / NO DATA / config error
 
 ## Verdict rules
 

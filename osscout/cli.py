@@ -9,6 +9,7 @@ from .discover import _toml_block, discover_repos, format_discovery, starred_rep
 from .gh import GhError
 from .mining import mine_invited
 from .sweep import scan_issue
+from .track import format_track, run_track
 from .watch import format_watch, run_watch
 
 EXIT_CODES = {"GO": 0, "PASS": 0, "OK": 0, "NO-GO": 1, "SKIP": 1, "SKIP (stale)": 1,
@@ -115,6 +116,10 @@ def main(argv=None) -> int:
     p_disc.add_argument("--limit", type=int, default=20, help="merged PRs analyzed per repo (default 20)")
     p_disc.add_argument("--write", metavar="PATH", default=None, help="write the suggested [watch] block to PATH")
 
+    p_track = sub.add_parser("track", help="board of filed contributions: reviews, replies, competing PRs, blockers")
+    p_track.add_argument("--config", default=None, help="path to contributions.toml (default: ./contributions.toml or ~/.config/osscout/contributions.toml)")
+    p_track.add_argument("--no-autoseed", action="store_true", help="don't auto-add open PRs authored by @me")
+
     args = parser.parse_args(argv)
     _force_utf8_stdio()
     if args.cmd == "repo":
@@ -158,6 +163,19 @@ def main(argv=None) -> int:
                 Path(args.write).write_text(_toml_block(report["suggested"]) + "\n", encoding="utf-8")
                 print(f"\nwrote {args.write}")
             code = 0
+    elif args.cmd == "track":
+        try:
+            report = run_track(args.config, not args.no_autoseed)
+        except (FileNotFoundError, ValueError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            code = 2
+        else:
+            print(format_track(report))
+            needs = sum(
+                1 for i in report["items"]
+                if i["status"] in ("ATTENTION", "DONE", "ERROR")
+            )
+            code = 1 if needs else 0
     else:
         _print_windows()
         code = 0

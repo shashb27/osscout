@@ -8,3 +8,7 @@ dist/
 venv/
 .coverage
 htmlcov/
+
+# personal local config - not repo content
+osscout.toml
+contributions.toml
