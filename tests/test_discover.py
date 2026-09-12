@@ -109,6 +109,67 @@ def test_toml_block():
     assert _toml_block(["a/b", "c/d"]) == '[watch]\nrepos = [\n  "a/b",\n  "c/d",\n]'
 
 
+def test_discover_default_sample_is_40(monkeypatch):
+    limits = []
+
+    def fake(*args):
+        if args[0] == "pr":
+            limits.append(args[7])
+            return _prs("a", "b", "c")
+        if args[0] == "repo":
+            return {"pushedAt": RECENT}
+        raise AssertionError(f"unexpected gh call: {args}")
+
+    monkeypatch.setattr(culture, "gh_json", fake)
+    report = discover_repos(["good/repo"])
+    assert limits == ["40"]
+    assert report["suggested"] == ["good/repo"]
+
+
+def test_cli_discover_limit_defaults_to_40(monkeypatch, capsys):
+    from osscout.cli import main
+
+    limits = []
+
+    def fake(*args):
+        if args[0] == "pr":
+            limits.append(args[7])
+            return _prs("a", "b", "c")
+        if args[0] == "repo":
+            return {"pushedAt": RECENT}
+        raise AssertionError(f"unexpected gh call: {args}")
+
+    monkeypatch.setattr(culture, "gh_json", fake)
+    assert main(["discover", "--repos", "good/repo"]) == 0
+    assert limits == ["40"]
+
+
+def test_format_discovery_borderline_band_note(monkeypatch):
+    _fake_gh(
+        monkeypatch,
+        {"drift/repo": _prs(*(["x"] * 8 + ["a", "b", "c", "d"]))},
+        {"drift/repo": RECENT},
+    )
+    report = discover_repos(["drift/repo"])
+    assert report["results"][0]["verdict"] == "BORDERLINE"
+    out = format_discovery(report)
+    assert "borderline band - verify with a larger sample" in out
+
+
+def test_format_discovery_no_band_note_outside_60_70(monkeypatch):
+    _fake_gh(
+        monkeypatch,
+        {
+            "high/repo": _prs(*(["x"] * 9 + ["a", "b", "c"])),
+            "good/repo": _prs("a", "b", "c", "d"),
+        },
+        {"high/repo": RECENT, "good/repo": RECENT},
+    )
+    report = discover_repos(["high/repo", "good/repo"])
+    out = format_discovery(report)
+    assert "borderline band" not in out
+
+
 def test_no_candidates_is_an_error(capsys):
     from osscout.cli import main
 

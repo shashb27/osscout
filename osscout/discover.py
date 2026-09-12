@@ -15,7 +15,7 @@ def starred_repos(login: str) -> list[str]:
     return [r["full_name"] for r in repos if r.get("full_name")]
 
 
-def discover_repos(repos: list[str], limit: int = 20) -> dict:
+def discover_repos(repos: list[str], limit: int = 40) -> dict:
     results = []
     for repo in repos:
         try:
@@ -43,6 +43,8 @@ def format_discovery(report: dict) -> str:
         note = f"{c['distinct_humans']} humans, top {c['top_human_share']:.0%} ({c['top_author']})"
         if r["verdict"] == "SKIP (stale)":
             note += f", stale {r['staleness']['days_since_push']}d"
+        if r["verdict"] == "BORDERLINE" and 0.6 <= c["top_human_share"] < 0.7:
+            note += " (borderline band - verify with a larger sample)"
         lines.append(f"  {r['verdict']:<13} {r['repo']:<40} {note}")
     lines += [
         "",

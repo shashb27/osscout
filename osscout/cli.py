@@ -54,6 +54,10 @@ def _print_issue(report: dict) -> None:
         else:
             print(f"  soft-claim : claimed by {sc['claimed_by']} (unconfirmed)")
             print(f"  caution    : unconfirmed claim on record - read the comment thread before opening a PR")
+    if sig["reporter_fix"]:
+        print("  caution    : reporter-demonstrated fix in body")
+    if sig["design_call"]:
+        print("  caution    : design-call issue (maintainer decision needed)")
     prs = report["prs"]
     for label, items in (("merged", prs["merged"]), ("open", prs["open"]),
                          ("closed<=60d", prs["recent_closed"]), ("closed>60d", prs["old_closed"])):
@@ -113,7 +117,7 @@ def main(argv=None) -> int:
     p_disc = sub.add_parser("discover", help="bootstrap a watchlist: run the repo gate over candidates")
     p_disc.add_argument("--from-stars", metavar="LOGIN", default=None, help="scan the GitHub stars of LOGIN")
     p_disc.add_argument("--repos", nargs="*", default=[], help="explicit candidate repos (overrides --from-stars)")
-    p_disc.add_argument("--limit", type=int, default=20, help="merged PRs analyzed per repo (default 20)")
+    p_disc.add_argument("--limit", type=int, default=40, help="merged PRs analyzed per repo (default 40)")
     p_disc.add_argument("--write", metavar="PATH", default=None, help="write the suggested [watch] block to PATH")
 
     p_track = sub.add_parser("track", help="board of filed contributions: reviews, replies, competing PRs, blockers")

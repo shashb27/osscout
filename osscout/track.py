@@ -1,11 +1,18 @@
+import re
 import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .data import AI_ACTIVITY_MARKERS, AI_ACTIVITY_PREFIXES
 from .gh import GhError, gh_json
 from .sweep import classify_prs
 
 KINDS = ("pr", "issue-comment", "upstream")
+
+RECORDS_DIR = Path("../oss-contributions")
+
+_FULL_REF_RE = re.compile(r"([\w.-]+/[\w.-]+)\s*#(\d+)")
+_BARE_REF_RE = re.compile(r"(?<![\w/.-])([a-z][\w.-]*)#(\d+)")
 
 
 def load_ledger(path: str | None = None) -> list[dict]:
@@ -63,13 +70,69 @@ def merge_entries(ledger: list[dict], seeded: list[dict]) -> list[dict]:
     return list(merged.values())
 
 
+def _in_ledger(entries: list[dict], repo: str, number: int) -> bool:
+    r = repo.lower()
+    for e in entries:
+        er = e["repo"].lower()
+        if "/" in r:
+            matched = er == r
+        else:
+            matched = er.endswith("/" + r)
+        if not matched:
+            continue
+        if int(e["number"]) == number:
+            return True
+        if e.get("issue") is not None and int(e["issue"]) == number:
+            return True
+    return False
+
+
+def reconcile_ledger(entries: list[dict], records_dir=None) -> list[str]:
+    records_dir = Path(records_dir) if records_dir is not None else RECORDS_DIR
+    if not records_dir.is_dir():
+        return []
+    refs: dict[tuple[str, int], str] = {}
+    for path in sorted(records_dir.glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        for repo, number in _FULL_REF_RE.findall(text):
+            refs.setdefault((repo.lower(), int(number)), str(path))
+        for repo, number in _BARE_REF_RE.findall(text):
+            refs.setdefault((repo.lower(), int(number)), str(path))
+    warnings = []
+    seen = set()
+    for (repo, number), path in refs.items():
+        short = repo.split("/")[-1]
+        if (short, number) in seen:
+            continue
+        seen.add((short, number))
+        if not _in_ledger(entries, repo, number):
+            warnings.append(
+                f"reconcile: {short}#{number} mentioned in {path} "
+                "but missing from ledger"
+            )
+    return warnings
+
+
+def _is_bot_activity(item: dict) -> bool:
+    body = (item.get("body") or "").strip().lower()
+    if not body:
+        return False
+    return any(m in body for m in AI_ACTIVITY_MARKERS) or any(
+        body.startswith(p) for p in AI_ACTIVITY_PREFIXES
+    )
+
+
 def _events(data: dict) -> list[tuple[str, str]]:
     events = []
     for c in data.get("comments") or []:
+        if _is_bot_activity(c):
+            continue
         events.append(
             (c.get("createdAt"), (c.get("author") or {}).get("login", "?"))
         )
     for r in data.get("reviews") or []:
+        if _is_bot_activity(r):
+            continue
         events.append(
             (r.get("submittedAt"), (r.get("author") or {}).get("login", "?"))
         )
@@ -188,6 +251,7 @@ def run_track(
     autoseed: bool = True,
     fetch=None,
     now: datetime | None = None,
+    records_dir=None,
 ) -> dict:
     if fetch is None:
         fetch = gh_json
@@ -206,6 +270,7 @@ def run_track(
         "items": items,
         "ledger_count": len(ledger),
         "auto_count": sum(1 for i in items if i.get("auto")),
+        "reconcile": reconcile_ledger(entries, records_dir),
     }
 
 
@@ -225,6 +290,11 @@ def format_track(report: dict) -> str:
         )
         lines.append(f"      {i.get('detail', '-')}")
     lines.append("")
+    reconcile = report.get("reconcile") or []
+    for w in reconcile:
+        lines.append(w)
+    if reconcile:
+        lines.append("")
     if attention:
         lines.append(
             f"{len(attention)} need attention: "

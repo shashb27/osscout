@@ -13,13 +13,14 @@ from osscout.watch import (
 NOW = dt.datetime(2026, 9, 3, 12, 0, tzinfo=dt.timezone.utc)
 
 
-def _issue(number, title="t", labels=(), comments=0, days_old=1):
+def _issue(number, title="t", labels=(), comments=0, days_old=1, body=None):
     return {
         "number": number,
         "title": title,
         "labels": [{"name": n} for n in labels],
         "comments": comments,
         "createdAt": (NOW - dt.timedelta(days=days_old)).isoformat().replace("+00:00", "Z"),
+        "body": body,
     }
 
 
@@ -128,6 +129,35 @@ def test_clean_issue():
     result = sweep_repo("o/r", days=7, limit=10, fetch=fetch, now=NOW)
     assert result[0]["verdict"] == "CLEAN"
     assert result[0]["why"] == "-"
+
+
+def test_reporter_fix_body_marks_caution():
+    fetch = FakeFetch(
+        [_issue(30, comments=1, body="Before: 412 ms. With this change: 388 ms")],
+        comments_by_issue={30: [_comment("confirmed the numbers")]},
+    )
+    result = sweep_repo("o/r", days=7, limit=10, fetch=fetch, now=NOW)
+    assert result[0]["verdict"] == "CAUTION"
+    assert "reporter-demonstrated fix in body" in result[0]["why"]
+
+
+def test_design_call_body_marks_caution_without_comment_fetch():
+    fetch = FakeFetch(
+        [_issue(31, body="@maintainer input would be welcome before any code is written")],
+    )
+    result = sweep_repo("o/r", days=7, limit=10, fetch=fetch, now=NOW)
+    assert result[0]["verdict"] == "CAUTION"
+    assert "design-call issue (maintainer decision needed)" in result[0]["why"]
+    assert not any(c[:2] == ("issue", "view") for c in fetch.calls)
+
+
+def test_taken_pr_outranks_body_caution():
+    fetch = FakeFetch(
+        [_issue(32, comments=1, body="my patch fixes this")],
+        prs_by_issue={32: [_pr(40, "OPEN", author="farm")]},
+    )
+    result = sweep_repo("o/r", days=7, limit=10, fetch=fetch, now=NOW)
+    assert result[0]["verdict"] == "TAKEN"
 
 
 def test_days_filter_and_limit():

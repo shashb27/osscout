@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
+import osscout.sweep as sweep_mod
 from osscout.culture import analyze_authors, is_bot, repo_staleness
-from osscout.sweep import classify_prs, issue_signals
+from osscout.sweep import classify_prs, issue_signals, scan_issue
 
 NOW = datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc)
 
@@ -223,3 +224,129 @@ class TestSoftClaim:
         r = issue_signals("CLOSED", [], comments)
         assert r["verdict"] == "DEAD"
         assert r["soft_claim"]["affirmed_by"] == "maint"
+
+
+class TestReporterFixBody:
+    def test_with_this_change_phrase(self):
+        body = "Before: 412 ms. With this change: 388 ms and AVX_VNNI = 1"
+        r = issue_signals("OPEN", [], [], body)
+        assert r["reporter_fix"] is True
+        assert r["verdict"] == "CAUTION"
+
+    def test_my_patch_phrase(self):
+        r = issue_signals("OPEN", [], [], "My patch drops the status gate, see the diff")
+        assert r["reporter_fix"] is True
+        assert r["verdict"] == "CAUTION"
+
+    def test_after_this_change_phrase(self):
+        r = issue_signals("OPEN", [], [], "After this change the GC tests go green")
+        assert r["reporter_fix"] is True
+        assert r["verdict"] == "CAUTION"
+
+    def test_patch_attached_phrase(self):
+        body = "Proposed fix (patch attached in our local probe; happy to PR it)"
+        r = issue_signals("OPEN", [], [], body)
+        assert r["reporter_fix"] is True
+        assert r["verdict"] == "CAUTION"
+
+    def test_happy_to_pr_phrase(self):
+        r = issue_signals("OPEN", [], [], "Verified locally, happy to PR if maintainers agree")
+        assert r["reporter_fix"] is True
+        assert r["verdict"] == "CAUTION"
+
+    def test_suggested_fix_for_contributors_stays_ok(self):
+        body = "Suggested fix: add a win32 branch in resolve() before the media check"
+        r = issue_signals("OPEN", [], [], body)
+        assert r["reporter_fix"] is False
+        assert r["verdict"] == "OK"
+
+    def test_plain_repro_body_stays_ok(self):
+        r = issue_signals("OPEN", [], [], "The build fails on Windows with a ValueError")
+        assert r["reporter_fix"] is False
+        assert r["design_call"] is False
+        assert r["verdict"] == "OK"
+
+    def test_does_not_override_dead(self):
+        r = issue_signals("CLOSED", [], [], "With this change it works")
+        assert r["verdict"] == "DEAD"
+
+    def test_does_not_override_hard_stops(self):
+        r = issue_signals("OPEN", ["no-new-fix-pr"], [], "With this change it works")
+        assert r["verdict"] == "NO-GO"
+
+
+class TestDesignCallBody:
+    def test_input_welcome_before_any_code(self):
+        body = "@sgugger your input would be welcome before any code is written"
+        r = issue_signals("OPEN", [], [], body)
+        assert r["design_call"] is True
+        assert r["verdict"] == "CAUTION"
+
+    def test_mention_plus_proposed_direction(self):
+        body = "@jbrockmendel the proposed direction is to consolidate the owners"
+        r = issue_signals("OPEN", [], [], body)
+        assert r["design_call"] is True
+        assert r["verdict"] == "CAUTION"
+
+    def test_proposed_direction_without_mention_is_not_design_call(self):
+        r = issue_signals("OPEN", [], [], "The proposed direction is to refactor the lexer")
+        assert r["design_call"] is False
+        assert r["verdict"] == "OK"
+
+    def test_mention_without_proposed_direction_is_not_design_call(self):
+        r = issue_signals("OPEN", [], [], "@maintainer could you take a look at the repro?")
+        assert r["design_call"] is False
+        assert r["verdict"] == "OK"
+
+    def test_email_address_is_not_a_mention(self):
+        body = "Reported to support@fastmail.com - proposed direction attached"
+        r = issue_signals("OPEN", [], [], body)
+        assert r["design_call"] is False
+
+
+def _fake_issue_gh(monkeypatch, issue, prs=None):
+    prs = prs or []
+
+    def fake(*args):
+        if args[0] == "issue":
+            return issue
+        if args[0] == "pr":
+            return prs
+        raise AssertionError(f"unexpected gh call: {args}")
+
+    monkeypatch.setattr(sweep_mod, "gh_json", fake)
+
+
+def _issue(state="OPEN", body="", comments=None):
+    return {"state": state, "title": "some bug", "labels": [],
+            "comments": comments or [], "body": body}
+
+
+class TestScanIssueBodyGate:
+    def test_reporter_fix_downgrades_go_to_caution(self, monkeypatch):
+        _fake_issue_gh(monkeypatch, _issue(body="With this change AVX_VNNI = 1"))
+        r = scan_issue("o/r", 5)
+        assert r["verdict"] == "CAUTION"
+        assert r["signals"]["reporter_fix"] is True
+
+    def test_design_call_downgrades_go_to_caution(self, monkeypatch):
+        _fake_issue_gh(
+            monkeypatch,
+            _issue(body="@maintainer input would be welcome before any code is written"),
+        )
+        r = scan_issue("o/r", 5)
+        assert r["verdict"] == "CAUTION"
+        assert r["signals"]["design_call"] is True
+
+    def test_clean_body_stays_go(self, monkeypatch):
+        _fake_issue_gh(monkeypatch, _issue(body="crash on startup, repro inside"))
+        assert scan_issue("o/r", 5)["verdict"] == "GO"
+
+    def test_open_pr_still_blocks_over_body_caution(self, monkeypatch):
+        _fake_issue_gh(
+            monkeypatch,
+            _issue(body="My patch fixes this"),
+            prs=[{"number": 9, "state": "OPEN", "author": {"login": "farm"},
+                  "title": "fix", "closedAt": None}],
+        )
+        assert scan_issue("o/r", 5)["verdict"] == "NO-GO"

@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timedelta, timezone
 
 from .culture import is_bot
@@ -6,9 +7,12 @@ from .data import (
     BOT_QUEUE_MARKERS,
     CLAIM_PHRASES,
     DEPENDENCY_BOT_TITLE_WORDS,
+    DESIGN_CALL_PHRASES,
     HARD_STOP_LABELS,
     MAINTAINER_ASSOCIATIONS,
+    PROPOSED_DIRECTION_PHRASE,
     RECENT_CLOSED_DAYS,
+    REPORTER_FIX_PHRASES,
 )
 from .gh import gh_json
 
@@ -89,20 +93,35 @@ def _soft_claim(comments: list[dict]) -> dict | None:
     return None
 
 
+_MENTION_RE = re.compile(r"(?<![\w.])@\w+")
+
+
+def _design_call(body: str) -> bool:
+    if _match_phrases(body, DESIGN_CALL_PHRASES):
+        return True
+    normalized = (body or "").lower().replace("\u2019", "'")
+    return PROPOSED_DIRECTION_PHRASE in normalized and bool(_MENTION_RE.search(normalized))
+
+
 def issue_signals(
     state: str,
     labels: list[str],
     comments: list[dict],
+    body: str = "",
 ) -> dict:
     bodies = [c.get("body") or "" for c in comments]
     queued = [m for m in BOT_QUEUE_MARKERS if any(m in b for b in bodies)]
     hard_labels = [l for l in labels if l in HARD_STOP_LABELS]
     soft_claim = _soft_claim(comments)
+    reporter_fix = _match_phrases(body, REPORTER_FIX_PHRASES)
+    design_call = _design_call(body)
     dead = state != "OPEN"
     if dead:
         verdict = "DEAD"
     elif queued or hard_labels or (soft_claim and soft_claim["affirmed_by"]):
         verdict = "NO-GO"
+    elif reporter_fix or design_call:
+        verdict = "CAUTION"
     else:
         verdict = "OK"
     return {
@@ -112,6 +131,8 @@ def issue_signals(
         "bot_queue_markers": queued,
         "hard_stop_labels": hard_labels,
         "soft_claim": soft_claim,
+        "reporter_fix": reporter_fix,
+        "design_call": design_call,
         "verdict": verdict,
     }
 
@@ -120,12 +141,13 @@ def scan_issue(repo: str, number: int, extra_terms: list[str] | None = None) -> 
     issue = gh_json(
         "issue", "view", str(number),
         "--repo", repo,
-        "--json", "state,title,labels,comments",
+        "--json", "state,title,labels,comments,body",
     )
     signals = issue_signals(
         issue["state"],
         [l["name"] for l in issue["labels"]],
         issue["comments"],
+        issue.get("body") or "",
     )
     terms = [str(number), '"' + issue["title"] + '"'] + list(extra_terms or [])
     seen: dict[int, dict] = {}
@@ -143,7 +165,7 @@ def scan_issue(repo: str, number: int, extra_terms: list[str] | None = None) -> 
     if signals["verdict"] in ("DEAD", "NO-GO"):
         final = signals["verdict"]
     elif sweep["verdict"] == "GO":
-        final = "GO"
+        final = "CAUTION" if signals["verdict"] == "CAUTION" else "GO"
     elif sweep["verdict"] == "LIKELY FIXED":
         final = "DEAD"
     else:

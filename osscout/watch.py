@@ -74,27 +74,35 @@ def _issue_verdict(repo: str, issue: dict, fetch, now: datetime) -> dict:
         verdict = "CAUTION"
         reasons.append(f"old closed PR #{cls['old_closed'][0]['number']}")
 
+    comments = []
     if issue.get("comments"):
         data = fetch(
             "issue", "view", str(number), "--repo", repo, "--json", "comments",
         )
-        signals = issue_signals("OPEN", labels, data.get("comments", []))
-        if signals["bot_queue_markers"]:
-            result.update(
-                verdict="TAKEN",
-                why=f"bot queue: {signals['bot_queue_markers'][0]}",
-            )
-            return result
-        sc = signals["soft_claim"]
-        if sc and sc["affirmed_by"]:
-            result.update(
-                verdict="TAKEN",
-                why=f"claimed by {sc['claimed_by']}, affirmed by {sc['affirmed_by']}",
-            )
-            return result
-        if sc:
-            verdict = "CAUTION"
-            reasons.append(f"unconfirmed claim by {sc['claimed_by']}")
+        comments = data.get("comments", [])
+    signals = issue_signals("OPEN", labels, comments, issue.get("body") or "")
+    if signals["bot_queue_markers"]:
+        result.update(
+            verdict="TAKEN",
+            why=f"bot queue: {signals['bot_queue_markers'][0]}",
+        )
+        return result
+    sc = signals["soft_claim"]
+    if sc and sc["affirmed_by"]:
+        result.update(
+            verdict="TAKEN",
+            why=f"claimed by {sc['claimed_by']}, affirmed by {sc['affirmed_by']}",
+        )
+        return result
+    if sc:
+        verdict = "CAUTION"
+        reasons.append(f"unconfirmed claim by {sc['claimed_by']}")
+    if signals["reporter_fix"]:
+        verdict = "CAUTION"
+        reasons.append("reporter-demonstrated fix in body")
+    if signals["design_call"]:
+        verdict = "CAUTION"
+        reasons.append("design-call issue (maintainer decision needed)")
 
     result.update(verdict=verdict, why="; ".join(reasons) if reasons else "-")
     return result
@@ -104,7 +112,7 @@ def sweep_repo(repo: str, days: int, limit: int, fetch=gh_json, now: datetime | 
     now = now or datetime.now(timezone.utc)
     issues = fetch(
         "issue", "list", "--repo", repo, "--state", "open", "--limit", "100",
-        "--json", "number,title,labels,comments,createdAt",
+        "--json", "number,title,labels,comments,createdAt,body",
     )
     cutoff = now - timedelta(days=days)
     fresh = [i for i in issues if _created_at(i) >= cutoff]
