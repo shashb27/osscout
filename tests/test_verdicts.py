@@ -304,6 +304,41 @@ class TestDesignCallBody:
         assert r["design_call"] is False
 
 
+class TestParkedLabel:
+    def test_parked_label_downgrades_ok_to_caution(self):
+        r = issue_signals("OPEN", ["p4-enhancement-future 🧨"], [])
+        assert r["verdict"] == "CAUTION"
+        assert r["parked"] == ["p4-enhancement-future 🧨"]
+
+    def test_backlog_label_downgrades_ok_to_caution(self):
+        r = issue_signals("OPEN", ["community-backlog"], [])
+        assert r["verdict"] == "CAUTION"
+        assert r["parked"] == ["community-backlog"]
+
+    def test_plain_bug_label_stays_ok(self):
+        r = issue_signals("OPEN", ["bug"], [])
+        assert r["verdict"] == "OK"
+        assert r["parked"] == []
+
+    def test_does_not_override_dead(self):
+        r = issue_signals("CLOSED", ["parked"], [])
+        assert r["verdict"] == "DEAD"
+        assert r["parked"] == ["parked"]
+
+    def test_does_not_override_hard_stop_label(self):
+        r = issue_signals("OPEN", ["no-new-fix-pr", "parked"], [])
+        assert r["verdict"] == "NO-GO"
+
+    def test_scan_issue_parked_label_downgrades_go_to_caution(self, monkeypatch):
+        issue = {"state": "OPEN", "title": "some bug",
+                 "labels": [{"name": "p4-enhancement-future 🧨"}],
+                 "comments": [], "body": ""}
+        _fake_issue_gh(monkeypatch, issue)
+        r = scan_issue("o/r", 5)
+        assert r["verdict"] == "CAUTION"
+        assert r["signals"]["parked"] == ["p4-enhancement-future 🧨"]
+
+
 def _fake_issue_gh(monkeypatch, issue, prs=None):
     prs = prs or []
 

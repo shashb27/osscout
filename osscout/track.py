@@ -302,4 +302,10 @@ def format_track(report: dict) -> str:
         )
     else:
         lines.append("nothing needs attention")
+    if report["ledger_count"] == 0 and report["auto_count"]:
+        lines += [
+            "",
+            "tip: add [[contribution]] entries to contributions.toml (README has the format) "
+            "to also track issue comments and upstream blockers",
+        ]
     return "\n".join(lines)

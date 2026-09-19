@@ -53,4 +53,10 @@ def format_discovery(report: dict) -> str:
         "",
         _toml_block(report["suggested"]),
     ]
+    if not report["suggested"]:
+        lines += [
+            "",
+            "no candidates passed the gate - try: "
+            "osscout discover --repos OWNER/R1 OWNER/R2 --write osscout.toml",
+        ]
     return "\n".join(lines)

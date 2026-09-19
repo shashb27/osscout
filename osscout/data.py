@@ -28,6 +28,15 @@ HARD_STOP_LABELS = (
     "no-new-fix-pr",
 )
 
+PARKED_LABEL_PHRASES = (
+    "parked",
+    "backlog",
+    "someday",
+    "enhancement-future",
+    "p4",
+    "p5",
+)
+
 CLAIM_PHRASES = (
     "interested in this issue",
     "may i work on this",

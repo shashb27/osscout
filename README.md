@@ -13,8 +13,39 @@ Requires the [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenti
 ## Install
 
 ```
+pip install git+https://github.com/shashb27/osscout.git
+```
+
+Or clone and install:
+
+```
+git clone https://github.com/shashb27/osscout.git
+cd osscout
 pip install .
 ```
+
+## Getting started
+
+Python 3.11+ is required, plus the [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated.
+
+Five steps from zero to a daily board:
+
+1. Bootstrap your watchlist: `osscout discover --repos OWNER/R1 OWNER/R2 --write osscout.toml` (or `osscout discover --from-stars LOGIN` to start from your stars).
+2. Run the daily board: `osscout watch`.
+3. Deep-gate any CLEAN survivor before spending a day on it: `osscout issue OWNER/REPO N`.
+4. Before your first PR to a new community: `osscout repo OWNER/REPO`.
+5. Once you have filed contributions: `osscout track`.
+
+Verdict legend (exit codes: `0` = GO / PASS / quiet, `1` = NO-GO / SKIP / DEAD / LIKELY FIXED / track attention, `2` = BORDERLINE / CAUTION / NO DATA / config error):
+
+- **GO** — issue gate clean: no competing PRs, no claims, no hard stops.
+- **PASS** — repo merge culture is healthy (3+ distinct humans merge, top human at most 60%) and the repo isn't stale.
+- **CLEAN** — `watch` first pass only; not a gate — deep-gate with `osscout issue`.
+- **TAKEN** — someone already owns it: open/recent PR, merged fix, bot-queue marker, hard-stop label, or confirmed soft-claim.
+- **CAUTION** — read before committing: old closed PR, unconfirmed claim, reporter fix in the body, design call, or maintainer-parked label.
+- **SKIP** — external PRs rarely land here: solo-maintainer or bot-heavy merges, or a stale repo.
+- **BORDERLINE** — merge culture is on the edge; verify with a larger sample.
+- **quiet** — `track`: nothing needs a reply, rebase, or cleanup.
 
 ## Usage
 
@@ -94,12 +125,6 @@ number = 5386
 kind = "pr"              # pr | issue-comment | upstream
 issue = 5379             # optional: detect competing PRs on the parent issue
 ```
-
-## Exit codes (scriptable)
-
-- `0` — GO / PASS / quiet (track: nothing needs attention)
-- `1` — NO-GO / SKIP / DEAD / LIKELY FIXED / attention (track: reply, rebase, or cleanup due)
-- `2` — BORDERLINE / CAUTION / NO DATA / config error
 
 ## Verdict rules
 

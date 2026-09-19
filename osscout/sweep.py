@@ -10,6 +10,7 @@ from .data import (
     DESIGN_CALL_PHRASES,
     HARD_STOP_LABELS,
     MAINTAINER_ASSOCIATIONS,
+    PARKED_LABEL_PHRASES,
     PROPOSED_DIRECTION_PHRASE,
     RECENT_CLOSED_DAYS,
     REPORTER_FIX_PHRASES,
@@ -112,6 +113,7 @@ def issue_signals(
     bodies = [c.get("body") or "" for c in comments]
     queued = [m for m in BOT_QUEUE_MARKERS if any(m in b for b in bodies)]
     hard_labels = [l for l in labels if l in HARD_STOP_LABELS]
+    parked = [l for l in labels if any(p in l.lower() for p in PARKED_LABEL_PHRASES)]
     soft_claim = _soft_claim(comments)
     reporter_fix = _match_phrases(body, REPORTER_FIX_PHRASES)
     design_call = _design_call(body)
@@ -120,7 +122,7 @@ def issue_signals(
         verdict = "DEAD"
     elif queued or hard_labels or (soft_claim and soft_claim["affirmed_by"]):
         verdict = "NO-GO"
-    elif reporter_fix or design_call:
+    elif reporter_fix or design_call or parked:
         verdict = "CAUTION"
     else:
         verdict = "OK"
@@ -133,6 +135,7 @@ def issue_signals(
         "soft_claim": soft_claim,
         "reporter_fix": reporter_fix,
         "design_call": design_call,
+        "parked": parked,
         "verdict": verdict,
     }
 

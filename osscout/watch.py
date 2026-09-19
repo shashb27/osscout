@@ -103,6 +103,9 @@ def _issue_verdict(repo: str, issue: dict, fetch, now: datetime) -> dict:
     if signals["design_call"]:
         verdict = "CAUTION"
         reasons.append("design-call issue (maintainer decision needed)")
+    if signals["parked"]:
+        verdict = "CAUTION"
+        reasons.append(f"maintainer-parked label: {signals['parked'][0]}")
 
     result.update(verdict=verdict, why="; ".join(reasons) if reasons else "-")
     return result

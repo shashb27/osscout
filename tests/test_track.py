@@ -355,6 +355,37 @@ def test_ledger_bad_kind(tmp_path):
         load_ledger(str(p))
 
 
+def test_track_tip_fires_only_on_empty_ledger_with_autoseed(monkeypatch, tmp_path):
+    ledger = tmp_path / "contributions.toml"
+    ledger.write_text("", encoding="utf-8")
+    _fake_gh(
+        monkeypatch,
+        prs={5: _pr(comments=[_c("shashb27")])},
+        search=[{"repository": {"nameWithOwner": "o/r"}, "number": 5, "title": "t"}],
+    )
+    report = run_track(str(ledger), autoseed=True, fetch=None,
+                       records_dir=str(tmp_path / "no-records"))
+    assert report["ledger_count"] == 0
+    assert report["auto_count"] == 1
+    out = format_track(report)
+    assert ("tip: add [[contribution]] entries to contributions.toml "
+            "(README has the format) to also track issue comments and "
+            "upstream blockers") in out
+
+
+def test_track_no_tip_when_ledger_has_entries(monkeypatch, tmp_path):
+    ledger = tmp_path / "contributions.toml"
+    ledger.write_text(
+        '[[contribution]]\nrepo = "o/r"\nnumber = 5\nkind = "pr"\n',
+        encoding="utf-8",
+    )
+    _fake_gh(monkeypatch, prs={5: _pr(comments=[_c("shashb27")])})
+    report = run_track(str(ledger), autoseed=False, fetch=None,
+                       records_dir=str(tmp_path / "no-records"))
+    out = format_track(report)
+    assert "tip:" not in out
+
+
 def test_cli_exit_code_attention(monkeypatch, capsys, tmp_path):
     from osscout.cli import main
 

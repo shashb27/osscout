@@ -160,6 +160,22 @@ def test_taken_pr_outranks_body_caution():
     assert result[0]["verdict"] == "TAKEN"
 
 
+def test_parked_label_marks_caution():
+    fetch = FakeFetch([_issue(33, labels=["p4-enhancement-future 🧨"])])
+    result = sweep_repo("o/r", days=7, limit=10, fetch=fetch, now=NOW)
+    assert result[0]["verdict"] == "CAUTION"
+    assert "maintainer-parked label: p4-enhancement-future 🧨" in result[0]["why"]
+
+
+def test_parked_label_does_not_override_taken():
+    fetch = FakeFetch(
+        [_issue(34, labels=["parked"])],
+        prs_by_issue={34: [_pr(50, "OPEN", author="farm")]},
+    )
+    result = sweep_repo("o/r", days=7, limit=10, fetch=fetch, now=NOW)
+    assert result[0]["verdict"] == "TAKEN"
+
+
 def test_days_filter_and_limit():
     issues = [_issue(20, days_old=1), _issue(21, days_old=6), _issue(22, days_old=30), _issue(23, days_old=2)]
     fetch = FakeFetch(issues)

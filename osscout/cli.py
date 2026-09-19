@@ -7,13 +7,24 @@ from .culture import scan_repo
 from .data import DURABLE_NICHES, FARM_WINDOWS
 from .discover import _toml_block, discover_repos, format_discovery, starred_repos
 from .gh import GhError
-from .mining import mine_invited
+from .mining import format_mine, mine_invited
 from .sweep import scan_issue
 from .track import format_track, run_track
 from .watch import format_watch, run_watch
 
 EXIT_CODES = {"GO": 0, "PASS": 0, "OK": 0, "NO-GO": 1, "SKIP": 1, "SKIP (stale)": 1,
               "DEAD": 1, "LIKELY FIXED": 1, "NO DATA": 2, "BORDERLINE": 2, "CAUTION": 2}
+
+VERDICT_LEGEND = """\
+verdicts:
+  GO / PASS   no blockers found - clear to contribute
+  CLEAN       watch first pass only - not a gate; deep-gate with `osscout issue`
+  TAKEN       someone already owns it: open/recent PR, merged fix, bot-queue marker, hard-stop label, or confirmed soft-claim
+  CAUTION     read first: old closed PR, unconfirmed claim, reporter fix in body, design call, or maintainer-parked label
+  SKIP        externals rarely land here: solo-maintainer/bot-heavy merges or a stale repo
+  BORDERLINE  merge culture on the edge - verify with a larger sample
+  quiet       track: nothing needs a reply, rebase, or cleanup
+exit codes: 0 = GO/PASS/quiet, 1 = NO-GO/SKIP/DEAD/LIKELY FIXED/attention, 2 = BORDERLINE/CAUTION/NO DATA/config error"""
 
 
 def _force_utf8_stdio():
@@ -58,6 +69,8 @@ def _print_issue(report: dict) -> None:
         print("  caution    : reporter-demonstrated fix in body")
     if sig["design_call"]:
         print("  caution    : design-call issue (maintainer decision needed)")
+    if sig["parked"]:
+        print(f"  caution    : maintainer-parked label: {sig['parked'][0]}")
     prs = report["prs"]
     for label, items in (("merged", prs["merged"]), ("open", prs["open"]),
                          ("closed<=60d", prs["recent_closed"]), ("closed>60d", prs["old_closed"])):
@@ -67,14 +80,17 @@ def _print_issue(report: dict) -> None:
     if prs["noise_filtered"]:
         print(f"  (filtered {len(prs['noise_filtered'])} dependency-bot false positives)")
     print(f"  verdict    : {report['verdict']}")
-
-
-def _print_mine(issues: list[dict]) -> None:
-    if not issues:
-        print("no 'PR welcome' / 'pull-request wanted' invitations found")
-        return
-    for i in issues:
-        print(f"  #{i['number']}  {i['updatedAt'][:10]}  {i['title'][:90]}")
+    searched = sum(len(prs[b]) for b in ("merged", "open", "recent_closed", "old_closed"))
+    print(
+        f"  searched   : {searched} PRs across all states "
+        f"(number + title keywords), {sig['comment_count']} comment(s) read"
+    )
+    signals = [
+        "no competing PRs" if not (prs["open"] or prs["recent_closed"]) else "competing PRs found",
+        "no soft-claims" if not sig["soft_claim"] else "soft-claim on record",
+        "no bot-queue markers" if not sig["bot_queue_markers"] else "bot-queue markers found",
+    ]
+    print(f"  signals    : {', '.join(signals)}")
 
 
 def _print_windows() -> None:
@@ -90,17 +106,19 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog="osscout",
         description="Screen upstream repos/issues for OSS-contribution viability.",
+        epilog=VERDICT_LEGEND,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version="osscout " + __version__)
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    sub = parser.add_subparsers(dest="cmd", metavar="command", required=True)
 
     p_repo = sub.add_parser("repo", help="merge-culture + staleness gate for a repo")
     p_repo.add_argument("repo", help="OWNER/REPO")
-    p_repo.add_argument("--limit", type=int, default=20)
+    p_repo.add_argument("--limit", type=int, default=20, help="merged PRs analyzed (default 20)")
 
     p_issue = sub.add_parser("issue", help="competing-PR + bot-signal gate for one issue")
     p_issue.add_argument("repo", help="OWNER/REPO")
-    p_issue.add_argument("number", type=int)
+    p_issue.add_argument("number", type=int, help="issue number to gate")
     p_issue.add_argument("--keywords", nargs="*", default=[], help="extra search terms")
 
     p_mine = sub.add_parser("mine", help="mine 'PR welcome' / 'pull-request wanted' invitations")
@@ -135,7 +153,7 @@ def main(argv=None) -> int:
         _print_issue(report)
         code = EXIT_CODES.get(report["verdict"], 2)
     elif args.cmd == "mine":
-        _print_mine(mine_invited(args.repo))
+        print(format_mine(args.repo, mine_invited(args.repo)))
         code = 0
     elif args.cmd == "watch":
         try:

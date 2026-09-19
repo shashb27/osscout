@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "osscout"
-version = "0.5.1"
+version = "0.5.2"
 description = "Screen upstream repos and issues for OSS-contribution viability: merge culture, competing PRs, farm windows, PR-welcome mining."
 readme = "README.md"
 requires-python = ">=3.11"

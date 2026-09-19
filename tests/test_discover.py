@@ -170,6 +170,30 @@ def test_format_discovery_no_band_note_outside_60_70(monkeypatch):
     assert "borderline band" not in out
 
 
+def test_format_discovery_empty_suggestion_hints_explicit_candidates(monkeypatch):
+    _fake_gh(
+        monkeypatch,
+        {"solo/repo": _prs("solo", "solo", "solo")},
+        {"solo/repo": RECENT},
+    )
+    report = discover_repos(["solo/repo"])
+    assert report["suggested"] == []
+    out = format_discovery(report)
+    assert ("no candidates passed the gate - try: "
+            "osscout discover --repos OWNER/R1 OWNER/R2 --write osscout.toml") in out
+
+
+def test_format_discovery_pass_has_no_empty_hint(monkeypatch):
+    _fake_gh(
+        monkeypatch,
+        {"good/repo": _prs("a", "b", "c", "d")},
+        {"good/repo": RECENT},
+    )
+    report = discover_repos(["good/repo"])
+    out = format_discovery(report)
+    assert "no candidates passed the gate" not in out
+
+
 def test_no_candidates_is_an_error(capsys):
     from osscout.cli import main
 
