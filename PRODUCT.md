@@ -109,4 +109,12 @@ single-maintainer merge dominance as a hard warning.
 - measured farm windows (issue-created → first-PR timestamps computed from
   live data, replacing the static reference table)
 - parallelized `watch` sweep
-- PyPI release after a dogfooding period
+
+## Distribution decision (2026-09-19)
+
+PyPI declined (shashb27: no clear value for the niche audience vs. the
+maintenance/support expectations of a registry listing). Distribution is
+**repo-only**: public GitHub repo with CI; install via clone +
+`pip install .` or `pip install git+https://github.com/shashb27/osscout.git`.
+The original "PyPI release after a dogfooding period" roadmap item is closed
+as decided-against.
