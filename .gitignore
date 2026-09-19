@@ -12,3 +12,4 @@ htmlcov/
 # personal local config - not repo content
 osscout.toml
 contributions.toml
+DOGFOOD.md
