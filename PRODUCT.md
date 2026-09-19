@@ -112,7 +112,7 @@ single-maintainer merge dominance as a hard warning.
 
 ## Distribution decision (2026-09-19)
 
-PyPI declined (shashb27: no clear value for the niche audience vs. the
+PyPI declined (no clear value for the niche audience vs. the
 maintenance/support expectations of a registry listing). Distribution is
 **repo-only**: public GitHub repo with CI; install via clone +
 `pip install .` or `pip install git+https://github.com/shashb27/osscout.git`.

@@ -9,7 +9,7 @@ description = "Screen upstream repos and issues for OSS-contribution viability: 
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "shashb27", email = "210754767+shashb27@users.noreply.github.com" }]
+authors = [{ name = "shashb27" }]
 keywords = ["open-source", "contribution", "github", "triage"]
 classifiers = [
     "Development Status :: 4 - Beta",
