@@ -8,6 +8,7 @@ from .data import DURABLE_NICHES, FARM_WINDOWS
 from .discover import _toml_block, discover_repos, format_discovery, starred_repos
 from .gh import GhError
 from .mining import format_mine, mine_invited
+from .pounce import format_pounce, run_pounce, send_alerts
 from .sweep import scan_issue
 from .track import format_track, run_track
 from .watch import format_watch, run_watch
@@ -24,6 +25,7 @@ verdicts:
   SKIP        externals rarely land here: solo-maintainer/bot-heavy merges or a stale repo
   BORDERLINE  merge culture on the edge - verify with a larger sample
   quiet       track: nothing needs a reply, rebase, or cleanup
+  pounce      hot-window tripwire (hours not days): exit 1 = fresh CLEAN candidate(s) - deep-gate with `osscout issue` before acting
 exit codes: 0 = GO/PASS/quiet, 1 = NO-GO/SKIP/DEAD/LIKELY FIXED/attention, 2 = BORDERLINE/CAUTION/NO DATA/config error"""
 
 
@@ -132,6 +134,15 @@ def main(argv=None) -> int:
     p_watch.add_argument("--days", type=int, default=None, help="only issues created within N days (default 7)")
     p_watch.add_argument("--limit", type=int, default=None, help="max issues per repo (default 15)")
 
+    p_pounce = sub.add_parser("pounce", help="hot-window sweep for fast-burn repos (hours, not days)")
+    p_pounce.add_argument("--config", default=None, help="path to osscout.toml ([pounce] table)")
+    p_pounce.add_argument("--repos", nargs="*", default=[], help="repos to sweep (default: [pounce] repos)")
+    p_pounce.add_argument("--hours", type=float, default=None, help="only issues created within N hours (default 12)")
+    p_pounce.add_argument("--limit", type=int, default=None, help="max issues per repo (default 10)")
+    p_pounce.add_argument("--alert", nargs="?", const="config", default=None, metavar="OWNER/REPO",
+                          help="file one issue per CLEAN candidate in OWNER/REPO (default: [pounce] alert_repo) so GitHub emails you")
+    p_pounce.add_argument("--dry-run", action="store_true", help="print alerts instead of filing them")
+
     p_disc = sub.add_parser("discover", help="bootstrap a watchlist: run the repo gate over candidates")
     p_disc.add_argument("--from-stars", metavar="LOGIN", default=None, help="scan the GitHub stars of LOGIN")
     p_disc.add_argument("--repos", nargs="*", default=[], help="explicit candidate repos (overrides --from-stars)")
@@ -164,6 +175,29 @@ def main(argv=None) -> int:
         else:
             print(format_watch(report))
             code = 0
+    elif args.cmd == "pounce":
+        try:
+            report = run_pounce(args.repos, args.hours, args.limit, args.config)
+        except (FileNotFoundError, ValueError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            code = 2
+        else:
+            print(format_pounce(report))
+            code = 1 if report["has_candidates"] else 0
+            if args.alert and report["has_candidates"]:
+                try:
+                    alert_repo = None if args.alert == "config" else args.alert
+                    sent = send_alerts(report, alert_repo, args.config, args.dry_run)
+                except (FileNotFoundError, ValueError) as e:
+                    print(f"alert error: {e}", file=sys.stderr)
+                    sent = []
+                for s in sent:
+                    if "url" in s:
+                        print(f"alert filed: {s['key']} -> {s['url']}")
+                    elif "error" in s:
+                        print(f"alert failed: {s['key']}: {s['error']}", file=sys.stderr)
+                    else:
+                        print(f"alert (dry-run): {s['key']} -> {s['title']}")
     elif args.cmd == "discover":
         if args.repos:
             candidates = args.repos

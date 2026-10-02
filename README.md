@@ -98,6 +98,25 @@ A `CLEAN` verdict from `watch` is a first pass, not a gate — run `osscout issu
 
 Note: a full sweep makes a couple of hundred `gh` calls (well within authed rate limits) and takes a few minutes when run serially.
 
+**Hot-window tripwire for fast-burn repos (v0.6):**
+
+```
+osscout pounce
+osscout pounce --hours 6 --alert
+```
+
+Some communities claim every fresh issue within hours (agent-farm sweeper PRs), so a daily watch structurally misses the window. Pounce runs the same gates but the cutoff is hours, not days: it prints only `CLEAN` candidates with their age, and exits `1` when there are any — built for session-start runs and schedulers. `--alert` files one issue per candidate (deduped by `repo#number`) into a private alerts repo so GitHub emails you between runs:
+
+```toml
+[pounce]
+repos = ["sgl-project/sglang"]
+hours = 12
+limit = 10
+alert_repo = "your-login/pounce-alerts"
+```
+
+`CLEAN` from pounce is a tripwire, not a gate — still run `osscout issue` on anything before acting.
+
 **Bootstrap your shortlist (v0.4):**
 
 ```

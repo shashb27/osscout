@@ -39,7 +39,8 @@ def _issue_verdict(repo: str, issue: dict, fetch, now: datetime) -> dict:
     number = issue["number"]
     title = issue["title"]
     age_days = max((now - _created_at(issue)).days, 0)
-    result = {"number": number, "title": title, "age_days": age_days}
+    age_hours = round((now - _created_at(issue)).total_seconds() / 3600, 1)
+    result = {"number": number, "title": title, "age_days": age_days, "age_hours": age_hours}
 
     labels = [l["name"] for l in issue.get("labels", [])]
     hard = [l for l in labels if l in HARD_STOP_LABELS]
@@ -111,13 +112,17 @@ def _issue_verdict(repo: str, issue: dict, fetch, now: datetime) -> dict:
     return result
 
 
-def sweep_repo(repo: str, days: int, limit: int, fetch=gh_json, now: datetime | None = None) -> list[dict]:
+def sweep_repo(repo: str, days: int, limit: int, fetch=gh_json, now: datetime | None = None,
+               hours: float | None = None) -> list[dict]:
     now = now or datetime.now(timezone.utc)
     issues = fetch(
         "issue", "list", "--repo", repo, "--state", "open", "--limit", "100",
         "--json", "number,title,labels,comments,createdAt,body",
     )
-    cutoff = now - timedelta(days=days)
+    if hours is not None:
+        cutoff = now - timedelta(hours=hours)
+    else:
+        cutoff = now - timedelta(days=days)
     fresh = [i for i in issues if _created_at(i) >= cutoff]
     fresh.sort(key=_created_at, reverse=True)
     return [_issue_verdict(repo, i, fetch, now) for i in fresh[:limit]]
