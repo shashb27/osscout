@@ -11,6 +11,11 @@ KINDS = ("pr", "issue-comment", "upstream")
 
 RECORDS_DIR = Path("../oss-contributions")
 
+# Repos under these owners are internal work, not personal OSS contributions -
+# they live in private tickets, not on the OSS board. Auto-seed skips them;
+# explicit ledger entries always win.
+EXCLUDED_OWNERS = frozenset({"oxmiq"})
+
 _FULL_REF_RE = re.compile(r"([\w.-]+/[\w.-]+)\s*#(\d+)")
 _BARE_REF_RE = re.compile(r"(?<![\w/.-])([a-z][\w.-]*)#(\d+)")
 
@@ -52,14 +57,17 @@ def autoseed_prs(fetch=None, limit: int = 30) -> list[dict]:
     out = []
     for p in prs:
         repo = ((p.get("repository") or {}).get("nameWithOwner")) or ""
-        if repo:
-            out.append({
-                "repo": repo,
-                "number": int(p["number"]),
-                "kind": "pr",
-                "note": p.get("title", ""),
-                "auto": True,
-            })
+        if not repo:
+            continue
+        if repo.split("/")[0].lower() in EXCLUDED_OWNERS:
+            continue
+        out.append({
+            "repo": repo,
+            "number": int(p["number"]),
+            "kind": "pr",
+            "note": p.get("title", ""),
+            "auto": True,
+        })
     return out
 
 

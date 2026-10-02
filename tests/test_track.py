@@ -228,6 +228,22 @@ def test_autoseed_parses_search(monkeypatch):
                        "note": "t", "auto": True}]
 
 
+def test_autoseed_excludes_internal_orgs(monkeypatch):
+    _fake_gh(monkeypatch, search=[
+        {"repository": {"nameWithOwner": "oxmiq/capsule-webrtc"}, "number": 10,
+         "title": "internal bot PR"},
+        {"repository": {"nameWithOwner": "Oxmiq/Whatever"}, "number": 3,
+         "title": "case-insensitive"},
+        {"repository": {"nameWithOwner": "shashb27/genomeocean"}, "number": 3,
+         "title": "personal repo stays"},
+        {"repository": {"nameWithOwner": "ggml-org/llama.cpp"}, "number": 28910,
+         "title": "upstream stays"},
+    ])
+    seeded = autoseed_prs(None)
+    repos = [e["repo"] for e in seeded]
+    assert repos == ["shashb27/genomeocean", "ggml-org/llama.cpp"]
+
+
 def test_merge_entries_ledger_wins(monkeypatch):
     ledger = [{"repo": "o/r", "number": 5, "kind": "pr", "issue": 37}]
     seeded = [{"repo": "o/r", "number": 5, "kind": "pr", "auto": True},
