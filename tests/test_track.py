@@ -277,6 +277,68 @@ def test_run_track_no_entries(monkeypatch, tmp_path):
         run_track(str(ledger), autoseed=True, fetch=None)
 
 
+def _fake_audit(results, attention):
+    def fake(repos):
+        return {"results": results, "attention_count": attention}
+    return fake
+
+
+def test_run_track_policy_audit_section(monkeypatch, tmp_path):
+    ledger = tmp_path / "contributions.toml"
+    ledger.write_text(
+        '[[contribution]]\nrepo = "o/r"\nnumber = 5\nkind = "pr"\n',
+        encoding="utf-8",
+    )
+    _fake_gh(monkeypatch, prs={5: _pr(comments=[_c("shashb27")])})
+    audit = _fake_audit(
+        [{"repo": "o/r", "verdict": "POSTS_BANNED", "seed_verdict": None,
+          "new_policy": True, "attention": True}],
+        attention=1,
+    )
+    report = run_track(str(ledger), autoseed=False, fetch=None,
+                       records_dir=str(tmp_path / "no-records"),
+                       policy_audit=True, audit=audit)
+    assert report["policy"]["attention_count"] == 1
+    out = format_track(report)
+    assert "policy audit" in out
+    assert "POSTS_BANNED" in out
+    assert "NEW" in out
+    assert "policy change(s) need attention" in out
+
+
+def test_run_track_policy_audit_all_known(monkeypatch, tmp_path):
+    ledger = tmp_path / "contributions.toml"
+    ledger.write_text(
+        '[[contribution]]\nrepo = "o/r"\nnumber = 5\nkind = "pr"\n',
+        encoding="utf-8",
+    )
+    _fake_gh(monkeypatch, prs={5: _pr(comments=[_c("shashb27")])})
+    audit = _fake_audit(
+        [{"repo": "o/r", "verdict": "CLEAN", "seed_verdict": "CLEAN",
+          "new_policy": False, "attention": False}],
+        attention=0,
+    )
+    report = run_track(str(ledger), autoseed=False, fetch=None,
+                       records_dir=str(tmp_path / "no-records"),
+                       policy_audit=True, audit=audit)
+    out = format_track(report)
+    assert "no policy changes detected" in out
+    assert "(known)" in out
+
+
+def test_run_track_without_policy_audit_has_no_section(monkeypatch, tmp_path):
+    ledger = tmp_path / "contributions.toml"
+    ledger.write_text(
+        '[[contribution]]\nrepo = "o/r"\nnumber = 5\nkind = "pr"\n',
+        encoding="utf-8",
+    )
+    _fake_gh(monkeypatch, prs={5: _pr(comments=[_c("shashb27")])})
+    report = run_track(str(ledger), autoseed=False, fetch=None,
+                       records_dir=str(tmp_path / "no-records"))
+    assert "policy" not in report
+    assert "policy audit" not in format_track(report)
+
+
 LEDGER = [{"repo": "psf/black", "number": 5386, "kind": "pr", "issue": 5379}]
 
 

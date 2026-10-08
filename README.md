@@ -68,6 +68,8 @@ osscout policy OWNER/REPO
 
 Fetches the repo's policy files (CONTRIBUTING.md, AGENTS.md, AI_POLICY.md, CLAUDE.md, PR templates), scans them for AI/LLM clauses, and prints a hard verdict with the matched policy text quoted: `POSTS_BANNED` (exit 2 — AI-authored posts are prohibited there; a human writes every post), `DISCLOSURE_REQUIRED` (include the extracted disclosure format, e.g. pip's `Assisted-by:` line or sphinx's `## AI Disclosure` section), `AGENT_FRIENDLY`, `CLEAN` (exit 0), or `UNKNOWN` (exit 1 — treat as banned until a re-run succeeds). Shipped seed verdicts for audited repos can only be escalated by the live scan, never downgraded, so a renamed policy file cannot silently un-ban a repo.
 
+Weekly, re-run the gate across every repo on your board: `osscout track --policy-audit` appends a policy section to the board and flags attention (exit 1) when a repo's live verdict is stricter than its seed — i.e. a NEW policy was added since the last audit — or when a fetch failed (`UNKNOWN`, re-run needed).
+
 **Gate one issue — competing PRs (all states), bot-queue signals, hard-stop labels:**
 
 ```

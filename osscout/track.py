@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .data import AI_ACTIVITY_MARKERS, AI_ACTIVITY_PREFIXES
 from .gh import GhError, gh_json
+from .policy import audit_repos
 from .sweep import classify_prs
 
 KINDS = ("pr", "issue-comment", "upstream")
@@ -260,6 +261,8 @@ def run_track(
     fetch=None,
     now: datetime | None = None,
     records_dir=None,
+    policy_audit: bool = False,
+    audit=None,
 ) -> dict:
     if fetch is None:
         fetch = gh_json
@@ -274,12 +277,16 @@ def run_track(
         )
     me = (fetch("api", "user") or {}).get("login", "")
     items = [check_contribution(e, me, fetch, now) for e in entries]
-    return {
+    report = {
         "items": items,
         "ledger_count": len(ledger),
         "auto_count": sum(1 for i in items if i.get("auto")),
         "reconcile": reconcile_ledger(entries, records_dir),
     }
+    if policy_audit:
+        repos = [e["repo"] for e in entries if e["repo"].split("/")[0].lower() not in EXCLUDED_OWNERS]
+        report["policy"] = audit_repos(repos) if audit is None else audit(repos)
+    return report
 
 
 def format_track(report: dict) -> str:
@@ -316,4 +323,24 @@ def format_track(report: dict) -> str:
             "tip: add [[contribution]] entries to contributions.toml (README has the format) "
             "to also track issue comments and upstream blockers",
         ]
+    policy = report.get("policy")
+    if policy:
+        lines += ["", "policy audit (re-verify before posting in these repos):"]
+        for p in policy["results"]:
+            seed = p["seed_verdict"]
+            if p["attention"]:
+                tag = " NEW" if p["new_policy"] else ""
+            else:
+                tag = " (known)"
+            if seed and seed != p["verdict"]:
+                lines.append(f"  {p['repo']:<40} {p['verdict']:<20} (seed: {seed}){tag}")
+            else:
+                lines.append(f"  {p['repo']:<40} {p['verdict']:<20}{tag}")
+        if policy["attention_count"]:
+            lines.append(
+                f"{policy['attention_count']} policy change(s) need attention - "
+                "update the seed table and re-read the policy text before posting"
+            )
+        else:
+            lines.append("no policy changes detected")
     return "\n".join(lines)

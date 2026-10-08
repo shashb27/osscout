@@ -25,6 +25,7 @@ cannot silently un-ban a repo. Re-audit seeds when policies change.
 """
 
 import re
+import time
 
 from .gh import GhError, gh_json, gh_text
 
@@ -231,6 +232,55 @@ def scan_policy(repo: str) -> dict:
         report["disclosure_hint"] = "state the tool, what it was used for, and what is AI-generated"
     report["action"] = ACTIONS[verdict]
     return report
+
+
+def audit_repos(repos, scan=None) -> dict:
+    """Re-run the policy gate over the distinct repos of a ledger.
+
+    Returns per-repo results plus an attention count. Attention fires when a
+    repo's live verdict is MORE severe than its seed (or it has no seed and
+    is at least DISCLOSURE_REQUIRED) - i.e. a NEW policy was added since the
+    last audit - or when the live scan failed (UNKNOWN). Repos already known
+    to be POSTS_BANNED (seeded) are reported but do not raise attention.
+    """
+    if scan is None:
+        scan = scan_policy
+    seen = set()
+    results = []
+    for n, repo in enumerate(repos):
+        key = repo.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        if n:
+            # The audit fires ~8 API calls per repo; without a pause the
+            # burst trips GitHub's secondary rate limit and repos come
+            # back UNKNOWN (which correctly demands a re-run, but is noise).
+            time.sleep(1)
+        r = scan(repo)
+        seed_verdict = (r.get("seed") or {}).get("verdict")
+        verdict = r["verdict"]
+        if verdict == "UNKNOWN":
+            # Fetch failed: needs a re-run, but it is not a detected
+            # policy change, so no NEW tag.
+            new_policy = False
+        elif seed_verdict:
+            new_policy = VERDICT_SEVERITY[verdict] > VERDICT_SEVERITY[seed_verdict]
+        else:
+            # No audit history for this repo: anything stricter than
+            # CLEAN/AGENT_FRIENDLY is news.
+            new_policy = VERDICT_SEVERITY[verdict] >= 1
+        results.append({
+            "repo": repo,
+            "verdict": verdict,
+            "seed_verdict": seed_verdict,
+            "new_policy": new_policy,
+            "attention": verdict == "UNKNOWN" or new_policy,
+        })
+    return {
+        "results": results,
+        "attention_count": sum(1 for x in results if x["attention"]),
+    }
 
 
 def format_policy(report: dict) -> str:

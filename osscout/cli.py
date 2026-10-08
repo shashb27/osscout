@@ -158,6 +158,7 @@ def main(argv=None) -> int:
     p_track = sub.add_parser("track", help="board of filed contributions: reviews, replies, competing PRs, blockers")
     p_track.add_argument("--config", default=None, help="path to contributions.toml (default: ./contributions.toml or ~/.config/osscout/contributions.toml)")
     p_track.add_argument("--no-autoseed", action="store_true", help="don't auto-add open PRs authored by @me")
+    p_track.add_argument("--policy-audit", action="store_true", help="re-run the AI-policy gate over all ledger repos (weekly; ~8 gh calls per repo)")
 
     args = parser.parse_args(argv)
     _force_utf8_stdio()
@@ -231,7 +232,7 @@ def main(argv=None) -> int:
             code = 0
     elif args.cmd == "track":
         try:
-            report = run_track(args.config, not args.no_autoseed)
+            report = run_track(args.config, not args.no_autoseed, policy_audit=args.policy_audit)
         except (FileNotFoundError, ValueError) as e:
             print(f"error: {e}", file=sys.stderr)
             code = 2
@@ -241,6 +242,7 @@ def main(argv=None) -> int:
                 1 for i in report["items"]
                 if i["status"] in ("ATTENTION", "DONE", "ERROR")
             )
+            needs += (report.get("policy") or {}).get("attention_count", 0)
             code = 1 if needs else 0
     else:
         _print_windows()

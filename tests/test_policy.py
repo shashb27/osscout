@@ -2,7 +2,7 @@ import pytest
 
 import osscout.policy as policy_mod
 from osscout.cli import main
-from osscout.policy import format_policy, scan_policy
+from osscout.policy import audit_repos, format_policy, scan_policy
 
 LLAMA_TEXT = """\
 # AI Usage Policy
@@ -174,3 +174,57 @@ class TestCliPolicy:
     def test_unknown_repo_exits_1(self, monkeypatch, capsys):
         _patch(monkeypatch, [], fail=True)
         assert main(["policy", "someone/new"]) == 1
+
+
+class TestAuditRepos:
+    @staticmethod
+    def _scan_map(verdicts):
+        def fake(repo):
+            v = verdicts[repo]
+            if isinstance(v, tuple):
+                v, seed = v
+            else:
+                seed = None
+            r = {"repo": repo, "verdict": v, "seed": None, "files": [],
+                 "evidence": [], "agent_dirs": [], "disclosure_hint": None,
+                 "action": policy_mod.ACTIONS[v]}
+            if seed:
+                r["seed"] = {"verdict": seed, "note": "test seed"}
+            return r
+        return fake
+
+    def test_known_seed_ban_is_not_attention(self):
+        a = audit_repos(["ggml-org/llama.cpp"],
+                        scan=self._scan_map({"ggml-org/llama.cpp": ("POSTS_BANNED", "POSTS_BANNED")}))
+        assert a["attention_count"] == 0
+        assert a["results"][0]["attention"] is False
+
+    def test_new_ban_on_seeded_clean_repo_is_attention(self):
+        a = audit_repos(["sgl-project/sglang"],
+                        scan=self._scan_map({"sgl-project/sglang": ("POSTS_BANNED", "CLEAN")}))
+        assert a["attention_count"] == 1
+        assert a["results"][0]["new_policy"] is True
+
+    def test_unseeded_disclosure_is_attention(self):
+        a = audit_repos(["some/repo"], scan=self._scan_map({"some/repo": "DISCLOSURE_REQUIRED"}))
+        assert a["attention_count"] == 1
+        assert a["results"][0]["new_policy"] is True
+
+    def test_unseeded_clean_is_not_attention(self):
+        a = audit_repos(["some/repo"], scan=self._scan_map({"some/repo": "CLEAN"}))
+        assert a["attention_count"] == 0
+
+    def test_known_seed_disclosure_is_not_attention(self):
+        a = audit_repos(["pypa/pip"],
+                        scan=self._scan_map({"pypa/pip": ("DISCLOSURE_REQUIRED", "DISCLOSURE_REQUIRED")}))
+        assert a["attention_count"] == 0
+
+    def test_unknown_is_attention(self):
+        a = audit_repos(["some/repo"], scan=self._scan_map({"some/repo": "UNKNOWN"}))
+        assert a["attention_count"] == 1
+        assert a["results"][0]["new_policy"] is False
+
+    def test_dedupes_repos(self):
+        a = audit_repos(["some/repo", "Some/Repo", "other/repo"],
+                        scan=self._scan_map({"some/repo": "CLEAN", "other/repo": "CLEAN"}))
+        assert len(a["results"]) == 2
