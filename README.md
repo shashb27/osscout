@@ -28,13 +28,14 @@ pip install .
 
 Python 3.11+ is required, plus the [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated.
 
-Five steps from zero to a daily board:
+Six steps from zero to a daily board:
 
 1. Bootstrap your watchlist: `osscout discover --repos OWNER/R1 OWNER/R2 --write osscout.toml` (or `osscout discover --from-stars LOGIN` to start from your stars).
 2. Run the daily board: `osscout watch`.
 3. Deep-gate any CLEAN survivor before spending a day on it: `osscout issue OWNER/REPO N`.
 4. Before your first PR to a new community: `osscout repo OWNER/REPO`.
-5. Once you have filed contributions: `osscout track`.
+5. Before ANY post (comment, PR, issue) in ANY community, every time: `osscout policy OWNER/REPO`.
+6. Once you have filed contributions: `osscout track`.
 
 Verdict legend (exit codes: `0` = GO / PASS / quiet, `1` = NO-GO / SKIP / DEAD / LIKELY FIXED / track attention, `2` = BORDERLINE / CAUTION / NO DATA / config error):
 
@@ -46,6 +47,10 @@ Verdict legend (exit codes: `0` = GO / PASS / quiet, `1` = NO-GO / SKIP / DEAD /
 - **SKIP** — external PRs rarely land here: solo-maintainer or bot-heavy merges, or a stale repo.
 - **BORDERLINE** — merge culture is on the edge; verify with a larger sample.
 - **quiet** — `track`: nothing needs a reply, rebase, or cleanup.
+- **POSTS_BANNED** — `policy`: the repo prohibits AI-authored posts (descriptions, comments, replies). A human writes every post in their own words. Exit 2.
+- **DISCLOSURE_REQUIRED** — `policy`: AI use must be disclosed; the command extracts the required format.
+- **AGENT_FRIENDLY** / **CLEAN** — `policy`: no AI-post restrictions found.
+- **UNKNOWN** — `policy`: policy files could not be fetched; treat as POSTS_BANNED until a re-run succeeds. Exit 1.
 
 ## Usage
 
@@ -54,6 +59,14 @@ Verdict legend (exit codes: `0` = GO / PASS / quiet, `1` = NO-GO / SKIP / DEAD /
 ```
 osscout repo psf/black
 ```
+
+**Gate a repo's AI/contribution policy — BEFORE any post, every time (v0.7):**
+
+```
+osscout policy OWNER/REPO
+```
+
+Fetches the repo's policy files (CONTRIBUTING.md, AGENTS.md, AI_POLICY.md, CLAUDE.md, PR templates), scans them for AI/LLM clauses, and prints a hard verdict with the matched policy text quoted: `POSTS_BANNED` (exit 2 — AI-authored posts are prohibited there; a human writes every post), `DISCLOSURE_REQUIRED` (include the extracted disclosure format, e.g. pip's `Assisted-by:` line or sphinx's `## AI Disclosure` section), `AGENT_FRIENDLY`, `CLEAN` (exit 0), or `UNKNOWN` (exit 1 — treat as banned until a re-run succeeds). Shipped seed verdicts for audited repos can only be escalated by the live scan, never downgraded, so a renamed policy file cannot silently un-ban a repo.
 
 **Gate one issue — competing PRs (all states), bot-queue signals, hard-stop labels:**
 

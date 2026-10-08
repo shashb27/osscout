@@ -10,6 +10,7 @@ from .gh import GhError
 from .mining import format_mine, mine_invited
 from .pounce import format_pounce, run_pounce, send_alerts
 from .sweep import scan_issue
+from .policy import format_policy, scan_policy
 from .track import format_track, run_track
 from .watch import format_watch, run_watch
 
@@ -26,7 +27,9 @@ verdicts:
   BORDERLINE  merge culture on the edge - verify with a larger sample
   quiet       track: nothing needs a reply, rebase, or cleanup
   pounce      hot-window tripwire (hours not days): exit 1 = fresh CLEAN candidate(s) - deep-gate with `osscout issue` before acting
-exit codes: 0 = GO/PASS/quiet, 1 = NO-GO/SKIP/DEAD/LIKELY FIXED/attention, 2 = BORDERLINE/CAUTION/NO DATA/config error"""
+  policy      AI/contribution policy gate: POSTS_BANNED (exit 2 - a human writes every post) / DISCLOSURE_REQUIRED (include the
+              required disclosure) / AGENT_FRIENDLY / CLEAN (exit 0) / UNKNOWN (exit 1 - treat as banned until re-run succeeds)
+exit codes: 0 = GO/PASS/quiet, 1 = NO-GO/SKIP/DEAD/LIKELY FIXED/attention, 2 = BORDERLINE/CAUTION/NO DATA/config error/POSTS_BANNED"""
 
 
 def _force_utf8_stdio():
@@ -118,6 +121,9 @@ def main(argv=None) -> int:
     p_repo.add_argument("repo", help="OWNER/REPO")
     p_repo.add_argument("--limit", type=int, default=20, help="merged PRs analyzed (default 20)")
 
+    p_policy = sub.add_parser("policy", help="AI/contribution policy gate - run BEFORE any post in a repo")
+    p_policy.add_argument("repo", help="OWNER/REPO")
+
     p_issue = sub.add_parser("issue", help="competing-PR + bot-signal gate for one issue")
     p_issue.add_argument("repo", help="OWNER/REPO")
     p_issue.add_argument("number", type=int, help="issue number to gate")
@@ -159,6 +165,10 @@ def main(argv=None) -> int:
         report = scan_repo(args.repo, args.limit)
         _print_repo(report)
         code = EXIT_CODES.get(report["verdict"], 2)
+    elif args.cmd == "policy":
+        report = scan_policy(args.repo)
+        print(format_policy(report))
+        code = {"POSTS_BANNED": 2, "UNKNOWN": 1}.get(report["verdict"], 0)
     elif args.cmd == "issue":
         report = scan_issue(args.repo, args.number, args.keywords)
         _print_issue(report)
