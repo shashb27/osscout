@@ -123,6 +123,34 @@ class TestScanPolicy:
         r = scan_policy("some/repo")
         assert r["verdict"] == "CLEAN"
 
+    def test_404s_are_absence_not_failure(self, monkeypatch):
+        # All policy files 404 = repo has none = CLEAN, not UNKNOWN.
+        calls = []
+
+        def fake_text(*args):
+            calls.append(args)
+            raise policy_mod.GhError("gh: Not Found (HTTP 404)")
+
+        monkeypatch.setattr(policy_mod, "gh_text", fake_text)
+        r = scan_policy("some/repo")
+        assert len(calls) == len(policy_mod.POLICY_FILES)
+        assert r["verdict"] == "CLEAN"
+
+    def test_real_fetch_error_fails_closed_even_with_partial_files(self, monkeypatch):
+        # One file fetches fine, a later one hits a rate limit: the scan
+        # must NOT return a trusting verdict off partial data.
+        state = {"n": 0}
+
+        def fake_text(*args):
+            state["n"] += 1
+            if state["n"] == 1:
+                return NEUTRAL_TEXT
+            raise policy_mod.GhError("HTTP 403: rate limit exceeded")
+
+        monkeypatch.setattr(policy_mod, "gh_text", fake_text)
+        r = scan_policy("some/repo")
+        assert r["verdict"] == "UNKNOWN"
+
     def test_ai_code_allowed_alone_is_not_a_ban(self, monkeypatch):
         _patch(monkeypatch, [("CONTRIBUTING.md", "AI-generated code is allowed with disclosure.\n")])
         r = scan_policy("some/repo")

@@ -120,8 +120,10 @@ ACTIONS = {
 def fetch_policy_files(repo: str):
     """Return [(path, text)] for every policy file that exists in the repo.
 
-    Raises GhError if nothing could be fetched (network/auth failure),
-    which maps to the UNKNOWN verdict.
+    A 404 means the file is absent - a normal outcome for repos with no
+    policy files. Anything else (network, auth, rate limit) is a real
+    failure; if nothing could be fetched because of real failures, raise
+    GhError, which maps to the UNKNOWN verdict.
     """
     fetched = []
     saw_failure = False
@@ -131,13 +133,18 @@ def fetch_policy_files(repo: str):
                 "api", "-H", "Accept: application/vnd.github.raw",
                 f"repos/{repo}/contents/{path}",
             )
-        except GhError:
+        except GhError as e:
+            msg = str(e)
+            if "Not Found" in msg or "404" in msg:
+                continue  # file absent - not an error
             saw_failure = True
             continue
         if text and "Not Found" not in text[:200]:
             fetched.append((path, text))
-    if not fetched and saw_failure:
-        raise GhError(f"could not fetch any policy file for {repo}")
+    if saw_failure:
+        # Fail closed: a rate-limited or errored fetch could be the very
+        # file that contains the ban clause. Partial results are untrusted.
+        raise GhError(f"could not fetch policy files for {repo}: fetch error")
     return fetched
 
 
