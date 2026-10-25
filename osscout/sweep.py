@@ -109,20 +109,34 @@ def issue_signals(
     labels: list[str],
     comments: list[dict],
     body: str = "",
+    author: str = "",
+    assignees: list[str] | None = None,
 ) -> dict:
     bodies = [c.get("body") or "" for c in comments]
     queued = [m for m in BOT_QUEUE_MARKERS if any(m in b for b in bodies)]
     hard_labels = [l for l in labels if l in HARD_STOP_LABELS]
     parked = [l for l in labels if any(p in l.lower() for p in PARKED_LABEL_PHRASES)]
     soft_claim = _soft_claim(comments)
+    # A claim in the issue body is the author self-claiming the fix
+    # ("could a maintainer assign me so I can open the PR?") - treat it
+    # like an unconfirmed claim, same as one in the comments.
+    body_claim = soft_claim is None and _match_phrases(body, CLAIM_PHRASES)
+    if body_claim:
+        soft_claim = {"claimed_by": author or "(author)", "affirmed_by": None}
+    assigned = list(assignees or [])
     reporter_fix = _match_phrases(body, REPORTER_FIX_PHRASES)
     design_call = _design_call(body)
     dead = state != "OPEN"
     if dead:
         verdict = "DEAD"
-    elif queued or hard_labels or (soft_claim and soft_claim["affirmed_by"]):
+    elif (
+        queued
+        or hard_labels
+        or assigned
+        or (soft_claim and soft_claim["affirmed_by"])
+    ):
         verdict = "NO-GO"
-    elif reporter_fix or design_call or parked:
+    elif reporter_fix or design_call or parked or body_claim:
         verdict = "CAUTION"
     else:
         verdict = "OK"
@@ -133,6 +147,7 @@ def issue_signals(
         "bot_queue_markers": queued,
         "hard_stop_labels": hard_labels,
         "soft_claim": soft_claim,
+        "assignees": assigned,
         "reporter_fix": reporter_fix,
         "design_call": design_call,
         "parked": parked,
@@ -144,13 +159,15 @@ def scan_issue(repo: str, number: int, extra_terms: list[str] | None = None) -> 
     issue = gh_json(
         "issue", "view", str(number),
         "--repo", repo,
-        "--json", "state,title,labels,comments,body",
+        "--json", "state,title,labels,comments,body,author,assignees",
     )
     signals = issue_signals(
         issue["state"],
         [l["name"] for l in issue["labels"]],
         issue["comments"],
         issue.get("body") or "",
+        author=(issue.get("author") or {}).get("login", ""),
+        assignees=[a.get("login", "?") for a in issue.get("assignees") or []],
     )
     terms = [str(number), '"' + issue["title"] + '"'] + list(extra_terms or [])
     seen: dict[int, dict] = {}

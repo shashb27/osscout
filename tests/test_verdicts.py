@@ -385,3 +385,54 @@ class TestScanIssueBodyGate:
                   "title": "fix", "closedAt": None}],
         )
         assert scan_issue("o/r", 5)["verdict"] == "NO-GO"
+
+
+class TestAssigneeAndBodyClaimGates:
+    """Regression tests for the 2026-10-25 misses: keras#24068 (assigned to
+    the reporter, gate still said GO) and langgraph#9430 (reporter had a
+    patch + regression test ready and asked for assignment in the body)."""
+
+    def test_assigned_issue_is_no_go(self):
+        r = issue_signals("OPEN", [], [], "repro inside", assignees=["the-assignee"])
+        assert r["verdict"] == "NO-GO"
+        assert r["assignees"] == ["the-assignee"]
+
+    def test_body_claim_phrase_is_caution(self):
+        body = (
+            'Fix: join with "\\n". I have a patch and a regression test ready. '
+            "Could a maintainer assign me so I can open the PR?"
+        )
+        r = issue_signals("OPEN", [], [], body, author="thereporter")
+        assert r["verdict"] == "CAUTION"
+        assert r["soft_claim"]["claimed_by"] == "thereporter"
+        assert r["soft_claim"]["affirmed_by"] is None
+
+    def test_body_i_have_a_patch_is_reporter_fix_caution(self):
+        r = issue_signals("OPEN", [], [], "I have a patch for this")
+        assert r["reporter_fix"] is True
+        assert r["verdict"] == "CAUTION"
+
+    def test_assignee_beats_body_claim_for_verdict(self):
+        r = issue_signals(
+            "OPEN", [], [], "Could this be assigned to me?",
+            author="r", assignees=["r"],
+        )
+        assert r["verdict"] == "NO-GO"
+
+    def test_scan_issue_assignee_flow(self, monkeypatch):
+        issue = {"state": "OPEN", "title": "t", "labels": [], "comments": [],
+                 "body": "repro", "author": {"login": "rep"},
+                 "assignees": [{"login": "the-assignee"}]}
+        _fake_issue_gh(monkeypatch, issue)
+        r = scan_issue("o/r", 5)
+        assert r["verdict"] == "NO-GO"
+        assert r["signals"]["assignees"] == ["the-assignee"]
+
+    def test_scan_issue_body_claim_flow(self, monkeypatch):
+        issue = {"state": "OPEN", "title": "t", "labels": [], "comments": [],
+                 "body": "I'd like to work on the fix. Could a maintainer assign me?",
+                 "author": {"login": "rep"}, "assignees": []}
+        _fake_issue_gh(monkeypatch, issue)
+        r = scan_issue("o/r", 5)
+        assert r["verdict"] == "CAUTION"
+        assert r["signals"]["soft_claim"]["claimed_by"] == "rep"

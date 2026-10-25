@@ -1,4 +1,5 @@
 import re
+import time
 import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,7 @@ RECORDS_DIR = Path("../oss-contributions")
 # they live in private tickets, not on the OSS board. Auto-seed skips them;
 # explicit ledger entries always win.
 EXCLUDED_OWNERS = frozenset({"oxmiq"})
+EXCLUDED_BARE_REPOS = frozenset({"capsule", "shashb27"})
 
 _FULL_REF_RE = re.compile(r"([\w.-]+/[\w.-]+)\s*#(\d+)")
 _BARE_REF_RE = re.compile(r"(?<![\w/.-])([a-z][\w.-]*)#(\d+)")
@@ -96,12 +98,22 @@ def _in_ledger(entries: list[dict], repo: str, number: int) -> bool:
     return False
 
 
-def reconcile_ledger(entries: list[dict], records_dir=None) -> list[str]:
+def reconcile_ledger(entries: list[dict], records_dir=None, max_age_days: int = 14) -> list[str]:
+    """Warn about records mentioning upstream items that never made it into
+    the ledger. Only record files modified within `max_age_days` are
+    considered: old sweep reports and PR records mention dozens of dead
+    leads by design, and warning about them forever drowns out new drift."""
     records_dir = Path(records_dir) if records_dir is not None else RECORDS_DIR
     if not records_dir.is_dir():
         return []
+    cutoff = time.time() - max_age_days * 86400
     refs: dict[tuple[str, int], str] = {}
     for path in sorted(records_dir.glob("*.md")):
+        try:
+            if path.stat().st_mtime < cutoff:
+                continue
+        except OSError:
+            continue
         text = path.read_text(encoding="utf-8")
         for repo, number in _FULL_REF_RE.findall(text):
             refs.setdefault((repo.lower(), int(number)), str(path))
@@ -111,6 +123,16 @@ def reconcile_ledger(entries: list[dict], records_dir=None) -> list[str]:
     seen = set()
     for (repo, number), path in refs.items():
         short = repo.split("/")[-1]
+        owner = repo.split("/")[0].lower()
+        # our own journal/issue tracker and self-repos are never ledger
+        # candidates; a repo part ending in "-" or "." is a prose artifact
+        # (e.g. a draft title "compose-with-#43591"), not a repo
+        if owner in EXCLUDED_OWNERS or (
+            "/" not in repo and short.lower() in EXCLUDED_BARE_REPOS
+        ):
+            continue
+        if repo.split("/")[0].endswith(("-", ".")):
+            continue
         if (short, number) in seen:
             continue
         seen.add((short, number))
@@ -223,6 +245,11 @@ def check_contribution(entry: dict, me: str, fetch=None, now: datetime | None = 
         attention = True
         reasons.append("merged - the thing we waited on happened, act")
     elif state == "CLOSED":
+        if entry.get("status") in ("resolved", "closed-withdrawn"):
+            result.update(
+                status="DONE", state=state, detail="resolved - remove from ledger"
+            )
+            return result
         attention = True
         reasons.append("closed")
     if kind == "pr":
@@ -296,8 +323,11 @@ def format_track(report: dict) -> str:
         "",
     ]
     attention = []
+    done = []
     for i in report["items"]:
-        if i["status"] in ("ATTENTION", "DONE", "ERROR"):
+        if i["status"] == "DONE":
+            done.append(i)
+        elif i["status"] in ("ATTENTION", "ERROR"):
             attention.append(i)
         lines.append(
             f"  {i['status']:<9} {i['repo']}#{i['number']}"
@@ -317,6 +347,11 @@ def format_track(report: dict) -> str:
         )
     else:
         lines.append("nothing needs attention")
+    if done:
+        lines.append(
+            f"{len(done)} done - remove from ledger (or keep as resolved rows): "
+            + ", ".join(f"{i['repo']}#{i['number']}" for i in done)
+        )
     if report["ledger_count"] == 0 and report["auto_count"]:
         lines += [
             "",

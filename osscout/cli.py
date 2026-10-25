@@ -63,6 +63,8 @@ def _print_issue(report: dict) -> None:
         print(f"  bot-queue  : {', '.join(sig['bot_queue_markers'])}")
     if sig["hard_stop_labels"]:
         print(f"  hard labels: {', '.join(sig['hard_stop_labels'])}")
+    if sig.get("assignees"):
+        print(f"  assigned   : {', '.join(sig['assignees'])} (someone owns the lane)")
     sc = sig["soft_claim"]
     if sc:
         if sc["affirmed_by"]:
@@ -240,7 +242,7 @@ def main(argv=None) -> int:
             print(format_track(report))
             needs = sum(
                 1 for i in report["items"]
-                if i["status"] in ("ATTENTION", "DONE", "ERROR")
+                if i["status"] in ("ATTENTION", "ERROR")
             )
             needs += (report.get("policy") or {}).get("attention_count", 0)
             code = 1 if needs else 0

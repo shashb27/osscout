@@ -81,7 +81,18 @@ def _issue_verdict(repo: str, issue: dict, fetch, now: datetime) -> dict:
             "issue", "view", str(number), "--repo", repo, "--json", "comments",
         )
         comments = data.get("comments", [])
-    signals = issue_signals("OPEN", labels, comments, issue.get("body") or "")
+    assignees = [a.get("login", "?") for a in issue.get("assignees") or []]
+    author = (issue.get("author") or {}).get("login", "")
+    signals = issue_signals(
+        "OPEN", labels, comments, issue.get("body") or "",
+        author=author, assignees=assignees,
+    )
+    if signals["assignees"]:
+        result.update(
+            verdict="TAKEN",
+            why=f"assigned to {', '.join(signals['assignees'])}",
+        )
+        return result
     if signals["bot_queue_markers"]:
         result.update(
             verdict="TAKEN",
@@ -117,7 +128,7 @@ def sweep_repo(repo: str, days: int, limit: int, fetch=gh_json, now: datetime | 
     now = now or datetime.now(timezone.utc)
     issues = fetch(
         "issue", "list", "--repo", repo, "--state", "open", "--limit", "100",
-        "--json", "number,title,labels,comments,createdAt,body",
+        "--json", "number,title,labels,comments,createdAt,body,assignees,author",
     )
     if hours is not None:
         cutoff = now - timedelta(hours=hours)

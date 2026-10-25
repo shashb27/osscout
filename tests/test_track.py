@@ -374,6 +374,41 @@ def test_reconcile_missing_records_dir_is_noop(tmp_path):
     assert reconcile_ledger(LEDGER, str(tmp_path / "nope")) == []
 
 
+def test_reconcile_ignores_stale_record_files(tmp_path):
+    import os
+    import time
+
+    d = _records(tmp_path)
+    stale = d / "old-sweep-results.md"
+    stale.write_text("dead lead: pip#999999 mentioned but never pursued", encoding="utf-8")
+    old = time.time() - 30 * 86400
+    os.utime(stale, (old, old))
+    warnings = reconcile_ledger(LEDGER, str(d))
+    assert all("pip#999999" not in w for w in warnings)
+    # fresh files still warn
+    assert any("hermes-agent#100955" in w for w in warnings)
+
+
+def test_reconcile_max_age_zero_filters_everything(tmp_path):
+    d = _records(tmp_path)
+    assert reconcile_ledger(LEDGER, str(d), max_age_days=0) == []
+
+
+def test_reconcile_ignores_internal_and_prose_refs(tmp_path):
+    d = _records(tmp_path)
+    rec = d / "journal-refs.md"
+    rec.write_text(
+        "journal: capsule#2002, oxmiq/capsule#1899, shashb27#42; "
+        "draft title: compose-with-#43591; real lead: hermes-agent#777",
+        encoding="utf-8",
+    )
+    warnings = reconcile_ledger(LEDGER, str(d))
+    assert all("capsule" not in w for w in warnings)
+    assert all("shashb27" not in w for w in warnings)
+    assert all("compose-with" not in w for w in warnings)
+    assert any("hermes-agent#777" in w for w in warnings)
+
+
 def test_reconcile_bare_repo_form(tmp_path):
     d = tmp_path / "records"
     d.mkdir()

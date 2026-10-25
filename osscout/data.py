@@ -49,6 +49,11 @@ CLAIM_PHRASES = (
     "i will work on this",
     "i would like to investigate",
     "lmk what you think",
+    "could a maintainer assign me",
+    "could this be assigned to me",
+    "assign me so i can open the pr",
+    "please assign me",
+    "could you assign me",
 )
 
 AFFIRMATIVE_PHRASES = (
@@ -68,6 +73,9 @@ REPORTER_FIX_PHRASES = (
     "after this change",
     "patch attached",
     "happy to pr",
+    "i have a patch",
+    "i have a fix ready",
+    "patch and a regression test ready",
 )
 
 DESIGN_CALL_PHRASES = (
