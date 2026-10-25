@@ -77,11 +77,15 @@ osscout issue NousResearch/hermes-agent 100955
 osscout issue psf/black 5379 --keywords "drives" "find_project_root"
 ```
 
+The gate also checks claim and assignment signals (v0.8.2): **any assignee means NO-GO** — someone owns the lane — and a claim phrase in the issue *body* ("I have a patch and a regression test ready — could a maintainer assign me?") is treated as the author self-claiming the fix, downgrading the verdict to CAUTION with the claim on record. `watch` and `pounce` apply the same rules during sweeps, so assigned or body-claimed issues surface as TAKEN/CAUTION before they ever look like fresh candidates.
+
 **Mine maintainer invitations (`pull-request wanted` label + `PR welcome` comments):**
 
 ```
 osscout mine pyinstaller/pyinstaller
 ```
+
+Assigned invitations are listed last with an `[assigned to ...]` tag — the lane is taken unless the assignee stands down (v0.8.2).
 
 **Farm-window table + durable niches:**
 
